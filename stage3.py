@@ -1,34 +1,52 @@
-# stage3.py
-import argparse
-import requests
+import urllib.request
 import sys
+from pathlib import Path
+from typing import List, Dict, Tuple, Any
+import argparse
 
-parser = argparse.ArgumentParser()
-parser.add_argument("url")
-parser.add_argument("-o", "--output")
 
-class Args:
-    def __init__(self, url, output=None):
-        self.url = url
-        self.output = output
+def download_with_progress(url: str, output_filename: str):
+    try:
+        if output_filename:
+            filename = output_filename
+        else:
+            url_path = url.split('?')[0]
+            last_part = url_path.split('/')[-1]
+            if '.' in last_part:
+                filename = last_part
+            else:
+                filename = "downloaded_file"
+        filepath = Path(filename)
 
-args = Args(
-    url="https://raw.githubusercontent.com/python/cpython/main/README.rst",
-    # output="custom_readme.rst"  
-)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req)
+        
+        total_size = int(response.headers.get('Content-Length', 0))
+        block_size = 8192
+        downloaded = 0
 
-filename = args.output if args.output else args.url.split('/')[-1]
-response = requests.get(args.url, stream=True)
-total_size = int(response.headers.get('content-length', 0))
-downloaded = 0
+        with open(filepath, 'wb') as f:
+            while True:
+                buffer = response.read(block_size)
+                if not buffer:
+                    break
+                f.write(buffer)
+                downloaded += len(buffer)
 
-with open(filename, 'wb') as f:
-    for chunk in response.iter_content(chunk_size=8192):
-        f.write(chunk)
-        downloaded += len(chunk)
-        if total_size:
-            percent = (downloaded / total_size) * 100
-            sys.stdout.write(f"\rProgress: {downloaded}/{total_size} Bytes [{percent:.1f}%]")
-            sys.stdout.flush()
+                if total_size > 0:
+                    progress = (downloaded / total_size) * 100
+                    bar = '*' * int(progress // 2) + '-' * (50 - int(progress // 2))
+                    print(f"\r[{bar}] {progress:.1f}% ({downloaded}/{total_size} bytes)", end='')
 
-print("\nDone.")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="A simple wget-like CLI tool")
+    parser.add_argument("url", nargs='?', default="https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Tux.svg/200px-Tux.svg.png", help="URL to download")
+    parser.add_argument("-o", "--output", help="Output filename")
+    args, unknown = parser.parse_known_args()
+    
+    download_with_progress(args.url, args.output)
